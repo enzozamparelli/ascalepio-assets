@@ -69,9 +69,12 @@ jobs:
             python -m backend.scripts.manutenzione_cataloghi --pubblica --snapshot-ministero "$GITHUB_WORKSPACE/assets/fonti/ministero"
           fi
 
-      - name: Se qualcosa non va, apri una issue
+      - name: Se qualcosa non va, apri una issue (una sola alla volta)
         if: failure()
         run: |
-          gh issue create --repo "${{ github.repository }}" \
-            --title "Manutenzione cataloghi: giro non riuscito ($(date -u +%F))" \
-            --body "Il giro del ${{ github.run_id }} è fallito o ha bloccato un catalogo (fonte irraggiungibile, calo anomalo, prova di fumo). I cataloghi pubblicati NON sono stati toccati. Dettagli: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          aperte=$(gh issue list --repo "${{ github.repository }}" --state open --search "Manutenzione cataloghi in:title" --json number --jq length)
+          if [ "$aperte" = "0" ]; then
+            gh issue create --repo "${{ github.repository }}" \
+              --title "Manutenzione cataloghi: giro non riuscito ($(date -u +%F))" \
+              --body "Il giro ${{ github.run_id }} è fallito o ha bloccato un catalogo (fonte irraggiungibile, calo anomalo, prova di fumo). I cataloghi pubblicati NON sono stati toccati. Dettagli: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Chiudere questa issue quando il problema è risolto: finché è aperta non se ne aprono altre."
+          fi
