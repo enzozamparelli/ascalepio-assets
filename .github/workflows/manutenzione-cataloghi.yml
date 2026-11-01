@@ -1,0 +1,70 @@
+# Manutenzione automatica dei cataloghi (docs/MANUTENZIONE_CATALOGHI.md, docs/PIANO_CATALOGHI.md).
+#
+# QUESTO FILE VIVE IN DUE POSTI: la copia vera che GitHub esegue sta nel repo PUBBLICO `enzozamparelli/ascalepio-assets`, in
+# `.github/workflows/manutenzione-cataloghi.yml` (repo pubblico = minuti Actions gratuiti, il blocco di fatturazione del repo privato
+# non lo tocca). Qui c'è l'originale versionato col codice: si modifica qui e si copia lì (docs/MANUTENZIONE_CATALOGHI.md, «Installazione»).
+# Non sta in `.github/workflows/` di questo repo apposta: sul repo privato non girerebbe.
+name: Manutenzione cataloghi
+
+on:
+  schedule:
+    - cron: "17 5 * * *"   # ogni giorno alle 05:17 UTC (un orario non tondo, per non cadere nelle ore di punta di GitHub)
+  workflow_dispatch:       # a richiesta, dal pulsante «Run workflow»
+    inputs:
+      pubblica:
+        description: "Pubblica davvero (togliere la spunta = solo prova, non carica niente)"
+        type: boolean
+        default: true
+
+# Solo ciò che serve: caricare i file sulla release e aprire una issue se qualcosa non va. Nessun trigger da pull request né da contributi esterni.
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: cataloghi
+  cancel-in-progress: false
+
+jobs:
+  manutenzione:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Codice (dal repo privato)
+        uses: actions/checkout@v4
+        with:
+          repository: Enzyme-Studio/asclepIO
+          ref: ${{ vars.CODICE_BRANCH || 'main' }}
+          # Deploy key di SOLA LETTURA registrata su Enzyme-Studio/asclepIO (l'organizzazione non accetta token personali granulari).
+          ssh-key: ${{ secrets.CODICE_DEPLOY_KEY }}
+          path: codice
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: codice/ascalepIO-v2/backend/requirements.txt
+
+      - name: Dipendenze
+        run: pip install -r codice/ascalepIO-v2/backend/requirements.txt
+
+      - name: Controlla le fonti, ricostruisce ciò che è cambiato, pubblica
+        working-directory: codice/ascalepIO-v2
+        env:
+          PYTHONPATH: .
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.pubblica }}" != "true" ]; then
+            python -m backend.scripts.manutenzione_cataloghi
+          else
+            python -m backend.scripts.manutenzione_cataloghi --pubblica
+          fi
+
+      - name: Se qualcosa non va, apri una issue
+        if: failure()
+        run: |
+          gh issue create --repo "${{ github.repository }}" \
+            --title "Manutenzione cataloghi: giro non riuscito ($(date -u +%F))" \
+            --body "Il giro del ${{ github.run_id }} è fallito o ha bloccato un catalogo (fonte irraggiungibile, calo anomalo, prova di fumo). I cataloghi pubblicati NON sono stati toccati. Dettagli: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
