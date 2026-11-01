@@ -42,6 +42,13 @@ jobs:
           path: codice
           persist-credentials: false
 
+      # Questo stesso repo: serve la copia salvata degli elenchi del Ministero (`fonti/ministero/`). Il sito del Ministero, dai server di
+      # GitHub, risponde con una pagina di verifica invece che con i file: senza copia salvata l'ICD-10-IM non si potrebbe ricostruire.
+      - name: Copia salvata delle fonti
+        uses: actions/checkout@v4
+        with:
+          path: assets
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -57,9 +64,9 @@ jobs:
           PYTHONPATH: .
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.pubblica }}" != "true" ]; then
-            python -m backend.scripts.manutenzione_cataloghi
+            python -m backend.scripts.manutenzione_cataloghi --snapshot-ministero "$GITHUB_WORKSPACE/assets/fonti/ministero"
           else
-            python -m backend.scripts.manutenzione_cataloghi --pubblica
+            python -m backend.scripts.manutenzione_cataloghi --pubblica --snapshot-ministero "$GITHUB_WORKSPACE/assets/fonti/ministero"
           fi
 
       - name: Se qualcosa non va, apri una issue
